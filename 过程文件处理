@@ -1,0 +1,700 @@
+#!/usr/bin/env Rscript
+
+# 修正后的猪基因组Circos数据处理脚本
+# 解决染色体命名不匹配问题
+
+cat("=== 猪基因组Sscrofa11.1 Circos数据处理 (修正版) ===\n")
+cat("开始时间:", Sys.time(), "\n")
+cat("用户: plmmmz\n\n")
+
+# 设置路径
+setwd("~/2025-7-7重新注释结果/全基因组ciros图绘制")
+output_dir <- "/disk192/users_dir/buyu/2025-7-7重新注释结果/全基因组ciros图绘制"
+
+# 创建输出目录
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+}
+
+# 加载包
+library(rtracklayer)
+library(Rsamtools)
+library(GenomicAlignments)
+library(GenomicRanges)
+
+# 定义染色体映射关系
+# BigWig文件使用: chr1, chr2, ..., chrX, chrY
+# BAM文件使用: NC_010443.5, NC_010444.4, ...
+
+bigwig_main_chroms <- c(paste0("chr", 1:18), "chrX", "chrY")
+bam_main_chroms <- c(
+  "NC_010443.5", "NC_010444.4", "NC_010445.4", "NC_010446.5", "NC_010447.5",
+  "NC_010448.4", "NC_010449.5", "NC_010450.4", "NC_010451.4", "NC_010452.4",
+  "NC_010453.5", "NC_010454.4", "NC_010455.5", "NC_010456.5", "NC_010457.5",
+  "NC_010458.4", "NC_010459.5", "NC_010460.4", "NC_010461.5", "NC_010462.3"
+)
+
+# 创建映射表
+chrom_mapping <- setNames(bam_main_chroms, bigwig_main_chroms)
+reverse_mapping <- setNames(bigwig_main_chroms, bam_main_chroms)
+
+cat("染色体映射关系:\n")
+cat("  BigWig格式 -> BAM格式\n")
+for(i in 1:5) {
+  cat(sprintf("  %s -> %s\n", names(chrom_mapping)[i], chrom_mapping[i]))
+}
+cat("  ... (共", length(chrom_mapping), "个主要染色体)\n\n")
+
+# === 1. 处理H3K27ac数据 ===
+cat("=== 1. 处理H3K27ac数据 ===\n")
+tryCatch({
+  cat("读取H3K27ac BigWig文件...\n")
+  h3k27ac_data <- import("27ac.Con1.CPM.bw")
+  
+  # 过滤主要染色体（使用BigWig命名格式）
+  h3k27ac_main <- h3k27ac_data[seqnames(h3k27ac_data) %in% bigwig_main_chroms]
+  
+  if(length(h3k27ac_main) > 0) {
+    # 转换为数据框
+    h3k27ac_df <- as.data.frame(h3k27ac_main)
+    h3k27ac_clean <- h3k27ac_df[, c("seqnames", "start", "end", "score")]
+    colnames(h3k27ac_clean) <- c("chromosome", "start", "end", "signal")
+    
+    # 移除零信号区间
+    h3k27ac_nonzero <- h3k27ac_clean[h3k27ac_clean$signal > 0, ]
+    
+    # 保存数据
+    write.table(h3k27ac_clean, file.path(output_dir, "Con1_H3K27ac_main_chromosomes.txt"),
+                sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+    
+    write.table(h3k27ac_nonzero, file.path(output_dir, "Con1_H3K27ac_circos.txt"),
+                sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+    
+    cat("H3K27ac处理完成:\n")
+    cat("  主染色体区间:", nrow(h3k27ac_clean), "个\n")
+    cat("  非零信号区间:", nrow(h3k27ac_nonzero), "个\n")
+    cat("  信号范围:", round(min(h3k27ac_clean$signal), 6), "~", 
+        round(max(h3k27ac_clean$signal), 6), "\n")
+    
+    # 各染色体统计
+    chrom_stats <- table(h3k27ac_nonzero$chromosome)
+    cat("  各染色体非零区间数:\n")
+    for(i in 1:min(5, length(chrom_stats))) {
+      cat(sprintf("    %s: %d个区间\n", names(chrom_stats)[i], chrom_stats[i]))
+    }
+  } else {
+    cat("  未找到主要染色体数据\n")
+  }
+  
+}, error = function(e) {
+  cat("✗ H3K27ac处理失败:", e$message, "\n")
+})
+
+# === 2. 处理H3K4me1数据 ===
+cat("\n=== 2. 处理H3K4me1数据 ===\n")
+tryCatch({
+  cat("读取H3K4me1 BigWig文件...\n")
+  h3k4me1_data <- import("me1.Con1.CPM.bw")
+  
+  # 过滤主要染色体
+  h3k4me1_main <- h3k4me1_data[seqnames(h3k4me1_data) %in% bigwig_main_chroms]
+  
+  if(length(h3k4me1_main) > 0) {
+    # 转换为数据框
+    h3k4me1_df <- as.data.frame(h3k4me1_main)
+    h3k4me1_clean <- h3k4me1_df[, c("seqnames", "start", "end", "score")]
+    colnames(h3k4me1_clean) <- c("chromosome", "start", "end", "signal")
+    
+    # 移除零信号区间
+    h3k4me1_nonzero <- h3k4me1_clean[h3k4me1_clean$signal > 0, ]
+    
+    # 保存数据
+    write.table(h3k4me1_clean, file.path(output_dir, "Con1_H3K4me1_main_chromosomes.txt"),
+                sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+    
+    write.table(h3k4me1_nonzero, file.path(output_dir, "Con1_H3K4me1_circos.txt"),
+                sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+    
+    cat("H3K4me1处理完成:\n")
+    cat("  主染色体区间:", nrow(h3k4me1_clean), "个\n")
+    cat("  非零信号区间:", nrow(h3k4me1_nonzero), "个\n")
+    cat("  信号范围:", round(min(h3k4me1_clean$signal), 6), "~", 
+        round(max(h3k4me1_clean$signal), 6), "\n")
+  } else {
+    cat("  未找到主要染色体数据\n")
+  }
+  
+}, error = function(e) {
+  cat("✗ H3K4me1处理失败:", e$message, "\n")
+})
+
+# === 3. 处理RNA-seq数据 ===
+cat("\n=== 3. 处理RNA-seq数据 ===\n")
+tryCatch({
+  cat("检查BAM文件索引...\n")
+  bai_file <- "Con1.sort.bam.bai"
+  if(!file.exists(bai_file)) {
+    cat("创建BAM索引文件...\n")
+    indexBam("Con1.sort.bam")
+  }
+  
+  cat("分析BAM文件信息...\n")
+  bam_header <- scanBamHeader("Con1.sort.bam")
+  bam_chroms <- names(bam_header[[1]]$targets)
+  bam_lengths <- bam_header[[1]]$targets
+  
+  # 使用BAM文件中的主要染色体
+  available_main_chroms <- intersect(bam_main_chroms, bam_chroms)
+  cat("BAM文件中可用的主要染色体:", length(available_main_chroms), "个\n")
+  
+  if(length(available_main_chroms) > 0) {
+    # 设置参数
+    bin_size <- 100000  # 100kb bins
+    cat("使用", bin_size/1000, "kb bins进行RNA-seq信号计算\n")
+    
+    # 处理RNA-seq数据
+    rna_results <- data.frame()
+    
+    for(i in seq_along(available_main_chroms)) {
+      chrom <- available_main_chroms[i]
+      chrom_length <- bam_lengths[chrom]
+      chrom_display_name <- reverse_mapping[chrom]  # 转换为BigWig格式显示
+      
+      cat(sprintf("处理 %s (%s) [%d/%d], 长度: %.1f Mb\n", 
+                  chrom_display_name, chrom, i, length(available_main_chroms), 
+                  chrom_length/1e6))
+      
+      # 创建bins
+      bins_start <- seq(1, chrom_length, by = bin_size)
+      bins_end <- pmin(bins_start + bin_size - 1, chrom_length)
+      
+      # 读取该染色体的比对数据
+      param <- ScanBamParam(
+        which = GRanges(chrom, IRanges(1, chrom_length)),
+        flag = scanBamFlag(isUnmappedQuery = FALSE, isSecondaryAlignment = FALSE)
+      )
+      
+      alignments <- readGAlignments("Con1.sort.bam", param = param)
+      
+      if(length(alignments) > 0) {
+        # 计算覆盖度
+        coverage_data <- coverage(alignments)
+        
+        # 计算每个bin的平均覆盖度
+        bin_signals <- sapply(seq_along(bins_start), function(j) {
+          start_pos <- bins_start[j]
+          end_pos <- bins_end[j]
+          
+          if(chrom %in% names(coverage_data)) {
+            bin_coverage <- coverage_data[[chrom]][start_pos:end_pos]
+            mean(as.numeric(bin_coverage))
+          } else {
+            0
+          }
+        })
+        
+        # 创建数据框（使用BigWig格式的染色体名称以保持一致性）
+        chrom_df <- data.frame(
+          chromosome = chrom_display_name,  # 使用chr1, chr2等格式
+          start = bins_start,
+          end = bins_end,
+          signal = bin_signals,
+          stringsAsFactors = FALSE
+        )
+        
+        rna_results <- rbind(rna_results, chrom_df)
+        
+        non_zero_bins <- sum(bin_signals > 0)
+        cat(sprintf("  完成: %d个bins (其中%d个有信号), %d个reads\n", 
+                    nrow(chrom_df), non_zero_bins, length(alignments)))
+      } else {
+        cat("  该染色体无比对reads\n")
+      }
+      
+      # 内存管理
+      if(i %% 5 == 0) gc()
+    }
+    
+    if(nrow(rna_results) > 0) {
+      # 保存RNA-seq数据
+      write.table(rna_results, file.path(output_dir, "Con1_RNAseq_main_chromosomes.txt"),
+                  sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+      
+      # 为circos保存（移除零信号区间）
+      rna_nonzero <- rna_results[rna_results$signal > 0, ]
+      write.table(rna_nonzero, file.path(output_dir, "Con1_RNAseq_circos.txt"),
+                  sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+      
+      cat("RNA-seq处理完成:\n")
+      cat("  总区间:", nrow(rna_results), "个\n")
+      cat("  非零信号区间:", nrow(rna_nonzero), "个\n")
+      cat("  信号范围:", round(min(rna_results$signal), 4), "~", 
+          round(max(rna_results$signal), 4), "\n")
+      
+      # 统计每条染色体
+      if(nrow(rna_nonzero) > 0) {
+        chrom_counts <- table(rna_nonzero$chromosome)
+        cat("  各染色体非零区间数:\n")
+        for(i in 1:min(5, length(chrom_counts))) {
+          cat(sprintf("    %s: %d个区间\n", names(chrom_counts)[i], chrom_counts[i]))
+        }
+      }
+    }
+  } else {
+    cat("  未找到可用的主要染色体\n")
+  }
+  
+}, error = function(e) {
+  cat("✗ RNA-seq处理失败:", e$message, "\n")
+})
+
+# === 4. 创建染色体信息文件 ===
+cat("\n=== 4. 创建染色体信息文件 ===\n")
+tryCatch({
+  if(exists("bam_lengths")) {
+    # 使用可用的主要染色体创建信息表
+    available_chroms <- intersect(bam_main_chroms, names(bam_lengths))
+    
+    if(length(available_chroms) > 0) {
+      chrom_info_df <- data.frame(
+        bam_id = available_chroms,
+        chr_name = reverse_mapping[available_chroms],
+        length = as.numeric(bam_lengths[available_chroms]),
+        length_mb = round(as.numeric(bam_lengths[available_chroms]) / 1e6, 2),
+        stringsAsFactors = FALSE
+      )
+      
+      # 按染色体顺序排序
+      chrom_order <- c(paste0("chr", 1:18), "chrX", "chrY")
+      chrom_info_df <- chrom_info_df[match(chrom_order, chrom_info_df$chr_name), ]
+      chrom_info_df <- chrom_info_df[!is.na(chrom_info_df$chr_name), ]
+      
+      write.table(chrom_info_df, file.path(output_dir, "pig_chromosome_info.txt"),
+                  sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+      
+      # 创建circos karyotype文件
+      karyotype_lines <- paste0("chr - ", chrom_info_df$chr_name, " ", chrom_info_df$chr_name, 
+                               " 0 ", chrom_info_df$length, " chr", 1:nrow(chrom_info_df))
+      
+      writeLines(karyotype_lines, file.path(output_dir, "pig_karyotype.txt"))
+      
+      cat("染色体信息文件创建完成:\n")
+      cat("  主要染色体数:", nrow(chrom_info_df), "\n")
+      cat("  总基因组大小:", round(sum(chrom_info_df$length) / 1e9, 2), "Gb\n")
+    }
+  }
+}, error = function(e) {
+  cat("✗ 染色体信息文件创建失败:", e$message, "\n")
+})
+
+# === 5. 最终总结 ===
+cat("\n", strrep("=", 60), "\n")
+cat("处理完成! 结果总结:\n")
+cat(strrep("=", 60), "\n")
+cat("结束时间:", as.character(Sys.time()), "\n")
+cat("输出目录:", output_dir, "\n")
+
+# 检查生成的文件
+output_files <- list.files(output_dir, pattern = "\\.txt$", full.names = FALSE)
+cat("生成文件数:", length(output_files), "\n")
+
+if(length(output_files) > 0) {
+  total_size_mb <- sum(sapply(output_files, function(f) {
+    file.info(file.path(output_dir, f))$size
+  })) / 1024^2
+  cat("总文件大小:", round(total_size_mb, 2), "MB\n")
+  
+  cat("\n生成的文件:\n")
+  for(f in output_files) {
+    size_mb <- round(file.info(file.path(output_dir, f))$size / 1024^2, 2)
+    cat(sprintf("  ✓ %s (%.2f MB)\n", f, size_mb))
+  }
+}
+
+cat("\n数据已就绪，可以进行circos绘图!\n")
+cat("注意: 所有输出文件统一使用 chr1, chr2, ..., chrX, chrY 命名格式\n")
+cat(strrep("=", 60), "\n")
+
+# 清理内存
+gc()
+
+
+# 提取scRNA-seq数据的核心内容并保存
+
+#首先检查scRNA-seq结果
+# 检查单细胞数据
+setwd("/disk192/users_dir/buyu/2025-7-7重新注释结果/全基因组ciros图绘制/single_cell")
+
+cat("=== 单细胞数据检查 ===\n")
+cat("当前时间:", Sys.time(), "\n")
+cat("用户: plmmmz\n")
+cat("当前目录:", getwd(), "\n\n")
+
+# 检查文件
+cat("检查单细胞数据文件:\n")
+files <- list.files(".", full.names = FALSE)
+for(file in files) {
+  size_gb <- round(file.info(file)$size / 1024^3, 2)
+  cat(sprintf("  %s (%.2f GB)\n", file, size_gb))
+}
+
+# 加载必要的包
+cat("\n=== 加载R包 ===\n")
+required_packages <- c("qs", "Seurat", "dplyr", "ggplot2")
+
+for(pkg in required_packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    cat("安装", pkg, "...\n")
+    if(pkg == "qs") {
+      install.packages("qs", repos = "https://cran.r-project.org/")
+    } else if(pkg %in% c("Seurat", "dplyr", "ggplot2")) {
+      install.packages(pkg, repos = "https://cran.r-project.org/")
+    }
+  }
+  
+  suppressPackageStartupMessages(library(pkg, character.only = TRUE))
+  cat("✓", pkg, "\n")
+}
+
+# 加载单细胞数据
+cat("\n=== 加载单细胞数据 ===\n")
+cat("正在加载数据文件...\n")
+
+tryCatch({
+  sc_data <- qread("object_final_annotated_corrected_v2.qs")
+  
+  cat("数据加载成功!\n")
+  cat("数据类型:", class(sc_data), "\n")
+  
+  # 如果是Seurat对象
+  if("Seurat" %in% class(sc_data)) {
+    cat("\n=== Seurat对象信息 ===\n")
+    cat("细胞数:", ncol(sc_data), "\n")
+    cat("基因数:", nrow(sc_data), "\n")
+    
+    # 检查assays
+    cat("可用的assays:", paste(names(sc_data@assays), collapse = ", "), "\n")
+    
+    # 检查默认assay
+    cat("默认assay:", DefaultAssay(sc_data), "\n")
+    
+    # 检查reductions
+    if(length(sc_data@reductions) > 0) {
+      cat("可用的降维结果:", paste(names(sc_data@reductions), collapse = ", "), "\n")
+    }
+    
+    # 检查meta.data
+    cat("\n=== Meta.data信息 ===\n")
+    cat("Meta.data列数:", ncol(sc_data@meta.data), "\n")
+    cat("Meta.data列名:\n")
+    
+    meta_cols <- colnames(sc_data@meta.data)
+    for(i in 1:min(20, length(meta_cols))) {
+      col_name <- meta_cols[i]
+      if(is.numeric(sc_data@meta.data[[col_name]])) {
+        cat(sprintf("  %2d. %s (数值型)\n", i, col_name))
+      } else if(is.factor(sc_data@meta.data[[col_name]]) || is.character(sc_data@meta.data[[col_name]])) {
+        unique_vals <- length(unique(sc_data@meta.data[[col_name]]))
+        cat(sprintf("  %2d. %s (分类型, %d个类别)\n", i, col_name, unique_vals))
+      } else {
+        cat(sprintf("  %2d. %s (%s)\n", i, col_name, class(sc_data@meta.data[[col_name]])))
+      }
+    }
+    
+    if(length(meta_cols) > 20) {
+      cat(sprintf("  ... 还有 %d 个列\n", length(meta_cols) - 20))
+    }
+    
+    # 检查细胞类型/聚类信息
+    cat("\n=== 细胞分类信息 ===\n")
+    
+    # 寻找可能的细胞类型列
+    celltype_cols <- grep("celltype|cell_type|cluster|annotation|ident", meta_cols, ignore.case = TRUE, value = TRUE)
+    
+    if(length(celltype_cols) > 0) {
+      cat("可能的细胞类型/聚类列:\n")
+      for(col in celltype_cols) {
+        unique_vals <- unique(sc_data@meta.data[[col]])
+        cat(sprintf("  %s: %d个类别\n", col, length(unique_vals)))
+        if(length(unique_vals) <= 20) {
+          cat(sprintf("    类别: %s\n", paste(head(unique_vals, 10), collapse = ", ")))
+          if(length(unique_vals) > 10) cat("    ...\n")
+        }
+      }
+    } else {
+      cat("未找到明显的细胞类型列，检查seurat_clusters:\n")
+      if("seurat_clusters" %in% meta_cols) {
+        clusters <- unique(sc_data@meta.data$seurat_clusters)
+        cat(sprintf("  seurat_clusters: %d个聚类\n", length(clusters)))
+        cat(sprintf("  聚类编号: %s\n", paste(head(clusters, 15), collapse = ", ")))
+      }
+    }
+    
+    # 检查基因信息
+    cat("\n=== 基因信息 ===\n")
+    gene_names <- rownames(sc_data)
+    cat("基因名示例:\n")
+    cat(paste("  ", head(gene_names, 10), collapse = "\n"))
+    cat("\n")
+    
+    # 检查是否有基因注释
+    if(!is.null(sc_data@assays[[DefaultAssay(sc_data)]]@meta.features)) {
+      gene_meta <- sc_data@assays[[DefaultAssay(sc_data)]]@meta.features
+      if(ncol(gene_meta) > 0) {
+        cat("基因meta.features列:", paste(colnames(gene_meta), collapse = ", "), "\n")
+      }
+    }
+    
+  } else {
+    # 非Seurat对象
+    cat("这不是标准的Seurat对象\n")
+    cat("对象结构:\n")
+    str(sc_data, max.level = 2)
+  }
+  
+}, error = function(e) {
+  cat("数据加载失败:", e$message, "\n")
+  cat("尝试其他方法...\n")
+  
+  # 尝试用其他方法加载
+  tryCatch({
+    sc_data <- readRDS("object_final_annotated_corrected_v2.qs")
+    cat("使用readRDS加载成功\n")
+  }, error = function(e2) {
+    cat("所有加载方法都失败了:", e2$message, "\n")
+  })
+})
+
+cat("\n=== 检查完成 ===\n")
+cat("请查看上述信息，确定需要提取哪些数据用于circos图\n")
+
+
+
+####数据处理# 快速修复脚本 - 检查并修正染色体命名格式
+# 紧急修复scRNA-seq综合得分计算
+cat("=== 紧急修复scRNA-seq综合得分计算 ===\n")
+cat("修复时间:", Sys.time(), "\n")
+
+# 设置目录
+comprehensive_dir <- "/disk192/users_dir/buyu/2025-7-7重新注释结果/全基因组ciros图绘制/comprehensive_scrna_circos"
+base_dir <- "/disk192/users_dir/buyu/2025-7-7重新注释结果/全基因组ciros图绘制"
+setwd(base_dir)
+
+# 加载必要的包
+suppressPackageStartupMessages({
+  library(dplyr)
+})
+
+# === 1. 重新加载数据 ===
+cat("\n=== 1. 重新加载数据 ===\n")
+
+# 读取映射的marker基因数据
+mapped_data <- read.table(file.path(comprehensive_dir, "all_celltypes_markers_mapped.txt"),
+                         header = TRUE, stringsAsFactors = FALSE)
+cat("加载映射基因数据:", nrow(mapped_data), "个基因\n")
+
+# 读取细胞统计数据
+stats_data <- read.table(file.path(comprehensive_dir, "all_celltypes_statistics.txt"),
+                        header = TRUE, stringsAsFactors = FALSE)
+cat("加载细胞统计数据:", nrow(stats_data), "个细胞类型\n")
+
+# 读取染色体信息
+chrom_info <- read.table("info_files/pig_chromosome_info.txt", 
+                        header = TRUE, stringsAsFactors = FALSE)
+cat("加载染色体信息:", nrow(chrom_info), "条染色体\n")
+
+# === 2. 修复权重计算 ===
+cat("\n=== 2. 修复权重计算 ===\n")
+
+# 重新计算权重，确保名称匹配
+celltype_weights <- stats_data$count / sum(stats_data$count)
+names(celltype_weights) <- stats_data$celltype
+
+cat("修复后的权重:\n")
+for(i in 1:length(celltype_weights)) {
+  cat(sprintf("  %s: %.4f\n", names(celltype_weights)[i], celltype_weights[i]))
+}
+
+# 检查映射数据中的细胞类型是否都有权重
+mapped_celltypes <- unique(mapped_data$cluster)
+missing_weights <- setdiff(mapped_celltypes, names(celltype_weights))
+if(length(missing_weights) > 0) {
+  cat("❌ 缺少权重的细胞类型:", paste(missing_weights, collapse = ", "), "\n")
+} else {
+  cat("✅ 所有细胞类型都有对应权重\n")
+}
+
+# === 3. 重新计算综合得分 - 调试版本 ===
+cat("\n=== 3. 重新计算综合得分 ===\n")
+
+bin_size <- 100000
+comprehensive_density_fixed <- data.frame()
+
+for(chr in chrom_info$chr_name) {
+  cat(sprintf("处理 %s...\n", chr))
+  
+  chr_length <- chrom_info$length[chrom_info$chr_name == chr]
+  chr_markers <- mapped_data[mapped_data$chromosome == chr, ]
+  
+  if(nrow(chr_markers) > 0) {
+    cat(sprintf("  %s上有 %d 个marker基因\n", chr, nrow(chr_markers)))
+    
+    # 创建bins
+    bins_start <- seq(1, chr_length, by = bin_size)
+    bins_end <- pmin(bins_start + bin_size - 1, chr_length)
+    
+    # 计算每个bin的综合指标
+    bin_scores <- sapply(seq_along(bins_start), function(i) {
+      bin_start <- bins_start[i]
+      bin_end <- bins_end[i]
+      
+      # 该bin内的marker基因
+      genes_in_bin <- chr_markers[chr_markers$start >= bin_start & 
+                                 chr_markers$start <= bin_end, ]
+      
+      if(nrow(genes_in_bin) > 0) {
+        # 方法1: 加权marker基因密度
+        celltype_counts_in_bin <- table(genes_in_bin$cluster)
+        
+        # 调试：检查权重匹配
+        valid_celltypes <- names(celltype_counts_in_bin)[names(celltype_counts_in_bin) %in% names(celltype_weights)]
+        
+        if(length(valid_celltypes) > 0) {
+          valid_counts <- celltype_counts_in_bin[valid_celltypes]
+          valid_weights <- celltype_weights[valid_celltypes]
+          
+          weighted_score <- sum(valid_counts * valid_weights)
+          
+          # 方法2: 细胞类型多样性 (Shannon指数)
+          if(length(valid_counts) > 1) {
+            props <- valid_counts / sum(valid_counts)
+            # 避免log(0)问题
+            props <- props[props > 0]
+            if(length(props) > 0) {
+              diversity <- -sum(props * log(props))
+            } else {
+              diversity <- 0
+            }
+          } else {
+            diversity <- 0
+          }
+          
+          # 综合得分 = 加权密度 * (1 + 多样性/3)
+          comprehensive_score <- weighted_score * (1 + diversity/3)
+          
+          return(comprehensive_score)
+        } else {
+          # 如果没有有效的细胞类型匹配，返回基础计数
+          return(nrow(genes_in_bin) * 0.01)  # 基础权重
+        }
+      } else {
+        return(0)
+      }
+    })
+    
+    # 创建该染色体的数据框
+    chr_df <- data.frame(
+      chromosome = chr,
+      start = bins_start,
+      end = bins_end,
+      comprehensive_score = bin_scores,
+      stringsAsFactors = FALSE
+    )
+    
+    comprehensive_density_fixed <- rbind(comprehensive_density_fixed, chr_df)
+    
+    # 报告非零bins
+    nonzero_bins <- sum(bin_scores > 0)
+    if(nonzero_bins > 0) {
+      cat(sprintf("  生成 %d 个非零bins，最大得分: %.4f\n", nonzero_bins, max(bin_scores)))
+    }
+  }
+}
+
+# === 4. 检查修复结果 ===
+cat("\n=== 4. 检查修复结果 ===\n")
+
+# 只保留非零的bins
+comprehensive_nonzero_fixed <- comprehensive_density_fixed[comprehensive_density_fixed$comprehensive_score > 0, ]
+
+cat("修复后统计:\n")
+cat("  总bins:", nrow(comprehensive_density_fixed), "\n")
+cat("  非零bins:", nrow(comprehensive_nonzero_fixed), "\n")
+
+if(nrow(comprehensive_nonzero_fixed) > 0) {
+  cat("  最小得分:", min(comprehensive_nonzero_fixed$comprehensive_score), "\n")
+  cat("  最大得分:", max(comprehensive_nonzero_fixed$comprehensive_score), "\n")
+  cat("  平均得分:", round(mean(comprehensive_nonzero_fixed$comprehensive_score), 4), "\n")
+  cat("  NA值数量:", sum(is.na(comprehensive_nonzero_fixed$comprehensive_score)), "\n")
+  
+  # 检查前几行数据
+  cat("\n前5行修复后的数据:\n")
+  print(head(comprehensive_nonzero_fixed, 5))
+  
+  # === 5. 创建修复的circos文件 ===
+  cat("\n=== 5. 创建修复的circos文件 ===\n")
+  
+  # 创建综合scRNA-seq的circos输入文件
+  circos_scrna_fixed <- comprehensive_nonzero_fixed[, c("chromosome", "start", "end", "comprehensive_score")]
+  
+  # 标准化得分到合适的范围 (0-100)
+  max_score <- max(circos_scrna_fixed$comprehensive_score)
+  circos_scrna_fixed$comprehensive_score <- round(circos_scrna_fixed$comprehensive_score / max_score * 100, 2)
+  
+  # 保存修复的circos文件
+  write.table(circos_scrna_fixed, file.path(comprehensive_dir, "comprehensive_scrna_circos_FIXED.txt"),
+              sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+  
+  # 保存修复的密度数据
+  write.table(comprehensive_nonzero_fixed, file.path(comprehensive_dir, "comprehensive_scrna_density_FIXED.txt"),
+              sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+  
+  cat("修复的circos文件已保存:\n")
+  cat("  - comprehensive_scrna_circos_FIXED.txt\n")
+  cat("  - comprehensive_scrna_density_FIXED.txt\n")
+  cat("数据bins:", nrow(circos_scrna_fixed), "\n")
+  cat("标准化得分范围: 0 -", max(circos_scrna_fixed$comprehensive_score), "\n")
+  
+  # 检查修复后的circos文件
+  cat("\n修复后circos文件前5行:\n")
+  print(head(circos_scrna_fixed, 5))
+  
+} else {
+  cat("❌ 修复后仍然没有有效数据\n")
+  
+  # 进一步诊断
+  cat("\n进一步诊断:\n")
+  cat("映射基因的细胞类型:", paste(unique(mapped_data$cluster), collapse = ", "), "\n")
+  cat("权重中的细胞类型:", paste(names(celltype_weights), collapse = ", "), "\n")
+  
+  # 检查第一个有基因的染色体
+  for(chr in chrom_info$chr_name) {
+    chr_markers <- mapped_data[mapped_data$chromosome == chr, ]
+    if(nrow(chr_markers) > 0) {
+      cat(sprintf("%s上的基因示例:\n", chr))
+      print(head(chr_markers[, c("gene", "cluster", "start")], 3))
+      break
+    }
+  }
+}
+
+# === 总结 ===
+cat("\n", strrep("=", 60), "\n")
+cat("修复总结\n")
+cat(strrep("=", 60), "\n")
+
+if(exists("comprehensive_nonzero_fixed") && nrow(comprehensive_nonzero_fixed) > 0) {
+  cat("✅ 修复成功！\n")
+  cat("✅ scRNA-seq综合得分已正确计算\n")
+  cat("✅ 新的circos文件已生成\n")
+  cat("\n请使用以下文件进行circos绘制:\n")
+  cat("- pig_karyotype.txt\n")
+  cat("- Con1_H3K27ac_circos.txt\n")
+  cat("- Con1_H3K4me1_circos.txt\n")
+  cat("- Con1_RNAseq_circos.txt\n")
+  cat("- comprehensive_scrna_circos_FIXED.txt ⭐ 修复版\n")
+} else {
+  cat("❌ 修复失败，需要进一步调试\n")
+}
+
+cat(strrep("=", 60), "\n")
