@@ -1,0 +1,150 @@
+# 创建干净的配置文件
+cat > pig_five_layers_circos.conf << 'EOF'
+# 改进版五层Circos图配置
+karyotype = circos_input/pig_karyotype.txt
+chromosomes_units = 1000000
+chromosomes_display_default = yes
+
+<colors>
+chr1* = red
+chr2* = orange  
+chr3* = green
+chr4* = blue
+chr5* = purple
+chr6* = brown
+chr7* = pink
+chr8* = grey
+chr9* = olive
+chr10* = navy
+chr11* = maroon
+chr12* = teal
+chr13* = lime
+chr14* = aqua
+chr15* = fuchsia
+chr16* = silver
+chr17* = yellow
+chr18* = black
+chrX* = magenta
+chrY* = cyan
+</colors>
+
+<ideogram>
+<spacing>
+default = 0.005r
+</spacing>
+radius = 0.92r
+thickness = 25p
+fill = yes
+stroke_color = black
+stroke_thickness = 2p
+show_label = yes
+label_radius = 1.05r
+label_size = 32
+label_parallel = yes
+label_font = bold
+</ideogram>
+
+<image>
+dir = .
+file = pig_improved_five_layers_circos.png
+png = yes
+radius = 1400p
+background = white
+angle_offset = -90
+</image>
+
+show_ticks = yes
+show_tick_labels = yes
+
+<ticks>
+radius = 1r
+color = black
+thickness = 2p
+multiplier = 1e-6
+format = %d
+
+<tick>
+spacing = 5u
+size = 10p
+show_label = no
+</tick>
+
+<tick>
+spacing = 25u
+size = 15p
+show_label = yes
+label_size = 20p
+label_offset = 10p
+format = %d
+</tick>
+</ticks>
+
+<plots>
+
+<plot>
+type = histogram
+file = circos_input/Con1_H3K4me1_circos.txt
+r1 = 0.90r
+r0 = 0.84r
+fill_under = yes
+fill_color = purple
+thickness = 1
+min = 0
+max = 0.15
+</plot>
+
+<plot>
+type = histogram
+file = circos_input/Con1_H3K27ac_circos.txt
+r1 = 0.82r
+r0 = 0.76r
+fill_under = yes
+fill_color = orange
+thickness = 1
+min = 0
+max = 0.15
+</plot>
+
+<plot>
+type = histogram
+file = circos_input/Con1_RNA_circos.txt
+r1 = 0.74r
+r0 = 0.68r
+fill_under = yes
+fill_color = green
+thickness = 1
+min = 0
+max = 100
+</plot>
+
+<plot>
+type = histogram
+file = circos_input/scRNA_circos.txt
+r1 = 0.66r
+r0 = 0.60r
+fill_under = yes
+fill_color = blue
+thickness = 1
+min = 0
+max = 6
+</plot>
+
+<plot>
+type = histogram
+file = circos_input/gene_density_circos.txt
+r1 = 0.58r
+r0 = 0.52r
+fill_under = yes
+fill_color = red
+thickness = 1
+min = 0
+max = 50
+</plot>
+
+</plots>
+
+<<include etc/colors_fonts_patterns.conf>>
+<<include etc/housekeeping.conf>>
+EOF
+
+echo "干净的配置文件已创建！"
