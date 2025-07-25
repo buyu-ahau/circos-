@@ -1,0 +1,101 @@
+# 查看fragments文件
+zcat filtered_fragments.tsv.gz | head -10
+
+# 统计总的fragment数量
+zcat filtered_fragments.tsv.gz | wc -l
+
+
+# 查看你的chr_sizes.txt文件内容
+echo "Current chr_sizes.txt:"
+head -10 chr_sizes.txt
+
+# 查看fragments文件中有哪些染色体
+echo "Chromosomes in fragments file:"
+zcat filtered_fragments.tsv.gz | cut -f1 | sort | uniq -c | head -20
+
+# 查看insertion_sites.bed中的染色体
+echo "Chromosomes in insertion_sites.bed:"
+cut -f1 insertion_sites.bed | sort | uniq -c | head -20
+
+
+# 创建只包含标准染色体的insertion sites
+echo "Filtering to standard chromosomes (1-18)..."
+grep -E "^[0-9]+[[:space:]]" insertion_sites.bed > insertion_sites_filtered.bed
+
+# 检查过滤结果
+echo "Chromosomes after filtering:"
+cut -f1 insertion_sites_filtered.bed | sort | uniq -c
+
+echo "Total lines before filtering:"
+wc -l insertion_sites.bed
+
+echo "Total lines after filtering:"
+wc -l insertion_sites_filtered.bed
+
+# 使用过滤后的数据生成bedgraph
+echo "Generating bedgraph with filtered insertion sites..."
+bedtools genomecov -i insertion_sites_filtered.bed -g chr_sizes.txt -bg > insertion_coverage_filtered.bedgraph
+
+# 转换为BigWig
+echo "Converting to BigWig..."
+bedGraphToBigWig insertion_coverage_filtered.bedgraph chr_sizes.txt insertion_coverage_filtered.bw
+
+echo "Successfully generated insertion_coverage_filtered.bw"
+
+
+
+# 使用插入位点数据计算TSS矩阵
+echo "Computing TSS matrix with insertion sites..."
+computeMatrix reference-point \
+    --referencePoint TSS \
+    -p 4 \
+    -b 2000 -a 2000 \
+    -R genes_tss.bed \
+    -S insertion_coverage_filtered.bw \
+    --skipZeros \
+    --binSize 10 \
+    -o matrix_TSS_insertion.gz
+
+echo "TSS matrix computation completed!"
+
+
+
+# --- 生成红色系 PNG 格式的热图 ---
+echo "Generating TSS enrichment heatmap (Reds, PNG)..."
+plotHeatmap -m matrix_TSS_insertion.gz \
+    -out TSS_enrichment_scATAC_insertion_reds.png \
+    --plotTitle "TSS Enrichment (scATAC-seq Insertion Sites)" \
+    --colorMap Reds \
+    --whatToShow 'plot and heatmap' \
+    --sortUsing max \
+    --sortRegions descend \
+    --heatmapHeight 8 \
+    --heatmapWidth 3 \
+    --dpi 300
+
+# --- 生成红色系 PDF 格式的热图 ---
+echo "Generating TSS enrichment heatmap (Reds, PDF)..."
+plotHeatmap -m matrix_TSS_insertion.gz \
+    -out TSS_enrichment_scATAC_insertion_reds.pdf \
+    --plotTitle "TSS Enrichment (scATAC-seq Insertion Sites)" \
+    --colorMap Reds \
+    --whatToShow 'plot and heatmap' \
+    --sortUsing max \
+    --sortRegions descend \
+    --heatmapHeight 8 \
+    --heatmapWidth 3
+
+# --- 同时生成对应的 Profile 图 ---
+echo "Generating TSS profile plot..."
+plotProfile -m matrix_TSS_insertion.gz \
+    -out TSS_profile_scATAC_insertion_reds.png \
+    --plotTitle "TSS Profile (scATAC-seq Insertion Sites)" \
+    --yAxisLabel "Tn5 insertion frequency" \
+    --perGroup
+
+echo "----------------------------------------------------"
+echo "Analysis complete! Your new files are ready:"
+echo "PNG Heatmap: TSS_enrichment_scATAC_insertion_reds.png"
+echo "PDF Heatmap: TSS_enrichment_scATAC_insertion_reds.pdf"
+echo "PNG Profile: TSS_profile_scATAC_insertion_reds.png"
+echo "----------------------------------------------------"
